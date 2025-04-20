@@ -49,14 +49,17 @@ def handle_helpcom(message):
     markup.add(button1, button2, button3, button4, button5, button6)
     bot.send_message(message.chat.id, "Часто задаваемые вопросы:", reply_markup=markup)
 
-    @bot.message_handler(commands=['probTech'])
-    def hand_tecpr(message):
-        msg = bot.send_message(message.chat.id,
-                               "Пожалуйста, опишите проблему как можно подробнее. Наши разработчики уже уведомлены и скоро её исправят.",
-                               reply_markup=hideBoard)
-        bot.register_next_step_handler(msg, process_tech_request)
 
-    def process_tech_request(message):
+
+@bot.message_handler(commands=['probTech'])
+def hand_tecpr(message):
+    msg = bot.send_message(message.chat.id,
+                            "Пожалуйста, опишите проблему как можно подробнее. Наши разработчики уже уведомлены и скоро её исправят.",
+                            reply_markup=hideBoard)
+    bot.register_next_step_handler(msg, process_tech_request)
+
+
+def process_tech_request(message):
         user_id = message.from_user.id
         username = message.from_user.username
         request_text = message.text
@@ -65,20 +68,20 @@ def handle_helpcom(message):
         logic.save_tech_request(user_id, username, request_text)
         bot.send_message(message.chat.id, "✅ Ваш запрос успешно сохранен!")
 
-    @bot.message_handler(commands=['MyReq'])
-    def handle_myreq(message):
-        user_id = message.from_user.id
-        requests = logic.get_user_requests(user_id)
+@bot.message_handler(commands=['MyReq'])
+def handle_myreq(message):
+    user_id = message.from_user.id
+    requests = logic.get_user_requests(user_id)
 
-        if not requests:
-            bot.send_message(message.chat.id, "У вас нет активных запросов.")
-            return
+    if not requests:
+        bot.send_message(message.chat.id, "У вас нет активных запросов.")
+        return
 
-        response = "📝 Ваши последние запросы:\n\n"
-        for req in requests:
-            response += f"📅 {req['created_at']}\n🔧 Статус: {req['status']}\n✉️ Сообщение: {req['request_text']}\n\n"
+    response = "📝 Ваши последние запросы:\n\n"
+    for req in requests:
+        response += f"📅 {req['created_at']}\n🔧 Статус: {req['status']}\n✉️ Сообщение: {req['request_text']}\n\n"
 
-        bot.send_message(message.chat.id, response)
+    bot.send_message(message.chat.id, response)
 
 if __name__ == "__main__":
     bot.polling(none_stop=True)
