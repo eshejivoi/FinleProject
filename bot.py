@@ -60,13 +60,13 @@ def hand_tecpr(message):
 
 
 def process_tech_request(message):
-        user_id = message.from_user.id
-        username = message.from_user.username
-        request_text = message.text
+    user_id = message.from_user.id
+    username = message.from_user.username
+    request_text = message.text
 
-        # Сохраняем запрос в базу
-        logic.save_tech_request(user_id, username, request_text)
-        bot.send_message(message.chat.id, "✅ Ваш запрос успешно сохранен!")
+    # Сохраняем запрос в базу
+    logic.save_tech_request(user_id, username, request_text)
+    bot.send_message(message.chat.id, "✅ Ваш запрос успешно сохранен!")
 
 @bot.message_handler(commands=['MyReq'])
 def handle_myreq(message):
