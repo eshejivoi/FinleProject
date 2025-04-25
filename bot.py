@@ -91,6 +91,35 @@ def hand_helpcom(message):
     /MyReq - просмотреть ваши запросы""")
 
 
+def process_email(message):
+    chat_id = message.chat.id
+    email = message.text
+    problem_data = user_data.get(chat_id, {})
+    problem_desc = problem_data.get('problem')
+    request_type = problem_data.get('type', 'tech')
+
+    if not problem_desc:
+        bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните заново.")
+        return
+
+    username = message.from_user.username or str(message.from_user.id)
+    status = 'ждет рассмотрения'  # Новый статус
+    logic.add_user(username, email, problem_desc, status)
+
+    if chat_id in user_data:
+        del user_data[chat_id]
+
+    bot.send_message(chat_id, "✅ Ваш запрос успешно сохранен!")
+
+
+def process_problem_description(message, request_type):
+    chat_id = message.chat.id
+    problem_desc = message.text
+    user_data[chat_id] = {'problem': problem_desc, 'type': request_type}
+    msg = bot.send_message(chat_id, "Теперь, пожалуйста, введите ваш email.")
+    bot.register_next_step_handler(msg, process_email)  # Вызов process_email
+
+
 @bot.message_handler(commands=['probTech'])
 def hand_tecpr(message):
     msg = bot.send_message(message.chat.id, "Пожалуйста, опишите техническую проблему как можно подробнее.")
@@ -131,7 +160,6 @@ def process_email(message):
 
     bot.send_message(chat_id, "✅ Ваш запрос успешно сохранен!")
 
-
 @bot.message_handler(commands=['MyReq'])
 def handle_myreq(message):
     user_id = message.from_user.id
@@ -143,9 +171,15 @@ def handle_myreq(message):
 
     response = "📝 Ваши последние запросы:\n\n"
     for req in requests:
-        response += f"📅 {req['created_at']}\n🔧 Статус: {req['status']}\n✉️ Сообщение: {req['request_text']}\n\n"
+        # Добавляем иконки для разных статусов
+        status_icon = "🕒" if req['status'] == 'ждет рассмотрения' else "🔄" if req['status'] == 'рассматривается' else "✅"
+        response += f"""📅 {req['created_at']}
+{status_icon} Статус: {req['status']}
+✉️ Сообщение: {req['request_text']}\n\n"""
 
     bot.send_message(message.chat.id, response)
+
+
 
 
 if __name__ == "__main__":
