@@ -5,21 +5,76 @@ import logic
 hideBoard = types.ReplyKeyboardRemove()
 user_data = {}
 
+# Добавляем в начало main.py словарь с вопросами и ответами
+QA = {
+    "question_order": {
+        "question": "Как оформить заказ?",
+        "answer": """Для оформления заказа, пожалуйста, выберите интересующий вас товар и нажмите кнопку "Добавить в корзину", затем перейдите в корзину и следуйте инструкциям для завершения покупки."""
+    },
+    "question_status": {
+        "question": "Как узнать статус заказа?",
+        "answer": """Вы можете узнать статус вашего заказа, войдя в свой аккаунт на нашем сайте и перейдя в раздел "Мои заказы". Там будет указан текущий статус вашего заказа."""
+    },
+    "question_cancel": {
+        "question": "Как отменить заказ?",
+        "answer": "Если вы хотите отменить заказ, пожалуйста, свяжитесь с нашей службой поддержки как можно скорее. Мы постараемся помочь вам с отменой заказа до его отправки."
+    },
+    "question_broke": {
+        "question": "Что делать, если товар пришел поврежденным?",
+        "answer": "При получении поврежденного товара, пожалуйста, сразу свяжитесь с нашей службой поддержки и предоставьте фотографии повреждений. Мы поможем вам с обменом или возвратом товара."
+    },
+    "question_support": {
+        "question": "Как связаться с вашей технической поддержкой?",
+        "answer": "Вы можете связаться с нашей технической поддержкой через телефон на нашем сайте или написать нам в чат-бота."
+    },
+    "question_delivery": {
+        "question": "Как узнать информацию о доставке?",
+        "answer": "Информацию о доставке вы можете найти на странице оформления заказа на нашем сайте. Там указаны доступные способы доставки и сроки."
+    }
+}
 
+
+# Добавляем обработчик нажатий на кнопки
+@bot.callback_query_handler(func=lambda call: call.data in QA)
+def handle_qa_callback(call):
+    """Обработчик нажатий на кнопки с вопросами"""
+    data = call.data
+    question = QA[data]['question']
+    answer = QA[data]['answer']
+
+    # Форматируем ответ
+    response = f"❓ <b>{question}</b>\n\n{answer}"
+
+    # Отправляем ответ (используем parse_mode='HTML' для форматирования)
+    bot.send_message(
+        call.message.chat.id,
+        response,
+        parse_mode='HTML'
+    )
+
+    # Подтверждаем обработку callback
+    bot.answer_callback_query(call.id)
+
+
+# Модифицируем функцию создания кнопок (для динамического создания)
 @bot.message_handler(commands=['QuesAns'])
 def handle_helpcom(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    buttons = [
-        types.InlineKeyboardButton("Как оформить заказ?", callback_data="question_order"),
-        types.InlineKeyboardButton("Как узнать статус заказа?", callback_data="question_status"),
-        types.InlineKeyboardButton("Как отменить заказ?", callback_data="question_cancel"),
-        types.InlineKeyboardButton("Что делать, если товар пришел поврежденным?", callback_data="question_broke"),
-        types.InlineKeyboardButton("Как связаться с вашей технической поддержкой?", callback_data="question_support"),
-        types.InlineKeyboardButton("Как узнать информацию о доставке?", callback_data="question_delivery")
-    ]
-    markup.add(*buttons)
-    bot.send_message(message.chat.id, "Часто задаваемые вопросы:", reply_markup=markup)
 
+    # Динамически создаем кнопки из словаря QA
+    buttons = [
+        types.InlineKeyboardButton(
+            text=item['question'],
+            callback_data=key
+        ) for key, item in QA.items()
+    ]
+
+    markup.add(*buttons)
+    bot.send_message(
+        message.chat.id,
+        "Часто задаваемые вопросы:",
+        reply_markup=markup
+    )
 
 @bot.message_handler(commands=['start'])
 def hand_start(message):
