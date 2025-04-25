@@ -87,5 +87,37 @@ def add_user(username, email, request, status='Отправлено'):
     finally:
         conn.close()
 
+def update_request_status(request_id, new_status):
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE requests 
+            SET status = ?
+            WHERE id = ?
+        ''', (new_status, request_id))
+        conn.commit()
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+def migrate_old_statuses():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            UPDATE requests 
+            SET status = 'ждет рассмотрения' 
+            WHERE status LIKE 'Отправлено%'
+        ''')
+        conn.commit()
+        print(f"Обновлено записей: {cursor.rowcount}")
+    except Exception as e:
+        print(f"Ошибка миграции: {e}")
+    finally:
+        conn.close()
+
 if __name__ == "__main__":
     create_table()
+    migrate_old_statuses()  # Вызов миграции
