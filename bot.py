@@ -1,4 +1,4 @@
-from config import bot
+from config import bot, ADMINS
 from telebot import types
 import logic
 
@@ -179,6 +179,12 @@ def handle_myreq(message):
 
     bot.send_message(message.chat.id, response)
 
+@bot.message_handler(commands=['admin'])
+def handle_admin(message):
+    if message.from_user.id in ADMINS:
+        bot.send_message(message.chat.id, "Вы администратор!")
+    else:
+        bot.send_message(message.chat.id, "У вас нет прав администратора.")
 
 
 
