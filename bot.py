@@ -5,7 +5,6 @@ import logic
 hideBoard = types.ReplyKeyboardRemove()
 user_data = {}
 
-# Добавляем в начало main.py словарь с вопросами и ответами
 QA = {
     "question_order": {
         "question": "Как оформить заказ?",
