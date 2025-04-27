@@ -118,6 +118,19 @@ def migrate_old_statuses():
     finally:
         conn.close()
 
+def get_request_status(request_id):
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT status 
+        FROM requests 
+        WHERE id = ?
+    ''', (request_id,))
+    status = cursor.fetchone()
+    conn.close()
+    return status[0] if status else None
+
+
 if __name__ == "__main__":
     create_table()
     migrate_old_statuses()  # Вызов миграции
