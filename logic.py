@@ -5,11 +5,11 @@ def create_table():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
-    # Создание таблицы users
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
+            telegram_id INTEGER NOT NULL UNIQUE,
+            username TEXT,
             email TEXT NOT NULL
         )
     ''')
@@ -59,26 +59,25 @@ def get_user_requests(user_id):
 
 # logic.py
 
-def add_user(username, email, request, status='Отправлено'):
+# logic.py
+def add_user(telegram_id, username, email, request, status='ждет рассмотрения'):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     try:
-        # Обновляем или добавляем пользователя
+        # Обновляем или добавляем пользователя по telegram_id
         cursor.execute('''
-            INSERT INTO users (username, email)
-            VALUES (?, ?)
-            ON CONFLICT(username) DO UPDATE SET email=excluded.email
-        ''', (username, email))
-
-        # Получаем user_id
-        cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
-        user_id = cursor.fetchone()[0]
+            INSERT INTO users (telegram_id, username, email)
+            VALUES (?, ?, ?)
+            ON CONFLICT(telegram_id) DO UPDATE SET 
+                username=excluded.username,
+                email=excluded.email
+        ''', (telegram_id, username, email))
 
         # Добавляем запрос
         cursor.execute('''
             INSERT INTO requests (user_id, request, status)
-            VALUES (?, ?, ?)
-        ''', (user_id, request, status))
+            VALUES ((SELECT id FROM users WHERE telegram_id = ?), ?, ?)
+        ''', (telegram_id, request, status))
 
         conn.commit()
     except Exception as e:
@@ -86,6 +85,26 @@ def add_user(username, email, request, status='Отправлено'):
         conn.rollback()
     finally:
         conn.close()
+
+def get_user_requests(telegram_id):
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT r.created_at, r.status, r.request
+        FROM requests r
+        JOIN users u ON r.user_id = u.id
+        WHERE u.telegram_id = ?
+        ORDER BY r.created_at DESC
+    ''', (telegram_id,))
+    requests = []
+    for row in cursor.fetchall():
+        requests.append({
+            'created_at': row[0],
+            'status': row[1],
+            'request_text': row[2]
+        })
+    conn.close()
+    return requests
 
 def update_request_status(request_id, new_status):
     conn = sqlite3.connect('database.db')
@@ -102,6 +121,7 @@ def update_request_status(request_id, new_status):
         conn.rollback()
     finally:
         conn.close()
+
 def migrate_old_statuses():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
@@ -117,7 +137,23 @@ def migrate_old_statuses():
         print(f"Ошибка миграции: {e}")
     finally:
         conn.close()
+# logic.py (дополнение к migrate_old_statuses)
+def migrate_user_data():
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    try:
+        # Добавляем колонку telegram_id если она отсутствует
+        cursor.execute('PRAGMA table_info(users)')
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'telegram_id' not in columns:
+            cursor.execute('ALTER TABLE users ADD COLUMN telegram_id INTEGER')
+            conn.commit()
+    except Exception as e:
+        print(f"Ошибка миграции: {e}")
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     create_table()
-    migrate_old_statuses()  # Вызов миграции
+    migrate_user_data()  # Новая миграция
+    migrate_old_statuses()
