@@ -144,20 +144,28 @@ def process_email(message):
     email = message.text
     problem_data = user_data.get(chat_id, {})
     problem_desc = problem_data.get('problem')
-    request_type = problem_data.get('type', 'tech')
 
     if not problem_desc:
         bot.send_message(chat_id, "Произошла ошибка. Пожалуйста, начните заново.")
         return
 
+    telegram_id = message.from_user.id
     username = message.from_user.username or str(message.from_user.id)
-    status = 'Отправлено (тех.)' if request_type == 'tech' else 'Отправлено (прод.)'
-    logic.add_user(username, email, problem_desc, status)
+
+    # Все новые заявки создаются со статусом 'ждет рассмотрения'
+    logic.add_user(
+        telegram_id=telegram_id,
+        username=username,
+        email=email,
+        request=problem_desc,
+        status='ждет рассмотрения'
+    )
 
     if chat_id in user_data:
         del user_data[chat_id]
 
     bot.send_message(chat_id, "✅ Ваш запрос успешно сохранен!")
+
 
 @bot.message_handler(commands=['MyReq'])
 def handle_myreq(message):
@@ -169,11 +177,16 @@ def handle_myreq(message):
         return
 
     response = "📝 Ваши последние запросы:\n\n"
+    status_icons = {
+        'ждет рассмотрения': '🕒 Ожидает',
+        'в обработке': '🔄 В работе',
+        'решено': '✅ Завершено'
+    }
+
     for req in requests:
-        # Добавляем иконки для разных статусов
-        status_icon = "🕒" if req['status'] == 'ждет рассмотрения' else "🔄" if req['status'] == 'рассматривается' else "✅"
+        icon_text = status_icons.get(req['status'], '❓ Неизвестно')
         response += f"""📅 {req['created_at']}
-{status_icon} Статус: {req['status']}
+{icon_text}
 ✉️ Сообщение: {req['request_text']}\n\n"""
 
     bot.send_message(message.chat.id, response)
