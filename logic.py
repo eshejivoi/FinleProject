@@ -5,16 +5,17 @@ def create_table():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
 
-    # Создание таблицы users
+    # Таблица users с UNIQUE constraint для telegram_id
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
+            telegram_id INTEGER NOT NULL UNIQUE,
+            username TEXT,
             email TEXT NOT NULL
         )
     ''')
 
-    # Создание таблицы requests с проверкой наличия колонки created_at
+    # Таблица requests
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,26 +27,95 @@ def create_table():
         )
     ''')
 
-    # Проверяем наличие колонки created_at (для старых версий БД)
-    cursor.execute('PRAGMA table_info(requests)')
-    columns = [column[1] for column in cursor.fetchall()]
-    if 'created_at' not in columns:
-        cursor.execute('ALTER TABLE requests ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
-
     conn.commit()
     conn.close()
-# logic.py
 
-def get_user_requests(user_id):
+
+def migrate_add_unique():
+    """Миграция для добавления UNIQUE constraint к telegram_id"""
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+
+    try:
+        # Проверяем существование ограничения
+        cursor.execute('''
+            SELECT sql 
+            FROM sqlite_master 
+            WHERE type = 'table' 
+            AND name = 'users'
+        ''')
+        table_info = cursor.fetchone()[0]
+
+        if 'UNIQUE' not in table_info:
+            # Создаем новую таблицу с UNIQUE
+            cursor.execute('''
+                CREATE TABLE new_users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_id INTEGER NOT NULL UNIQUE,
+                    username TEXT,
+                    email TEXT NOT NULL
+                )
+            ''')
+
+            # Копируем данные
+            cursor.execute('''
+                INSERT INTO new_users (id, telegram_id, username, email)
+                SELECT id, telegram_id, username, email FROM users
+            ''')
+
+            # Заменяем таблицы
+            cursor.execute('DROP TABLE users')
+            cursor.execute('ALTER TABLE new_users RENAME TO users')
+
+            conn.commit()
+    except Exception as e:
+        print(f"Ошибка миграции UNIQUE: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def add_user(telegram_id, username, email, request, status='ждет рассмотрения'):
+    conn = sqlite3.connect('database.db')
+    cursor = conn.cursor()
+    try:
+        # Обновляем или добавляем пользователя
+        cursor.execute('''
+            INSERT INTO users (telegram_id, username, email)
+            VALUES (?, ?, ?)
+            ON CONFLICT(telegram_id) DO UPDATE SET
+                username=excluded.username,
+                email=excluded.email
+        ''', (telegram_id, username, email))
+
+        # Добавляем запрос
+        cursor.execute('''
+            INSERT INTO requests (user_id, request, status)
+            VALUES (
+                (SELECT id FROM users WHERE telegram_id = ?),
+                ?, ?
+            )
+        ''', (telegram_id, request, status))
+
+        conn.commit()
+    except Exception as e:
+        print(f"Ошибка добавления пользователя: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
+
+def get_user_requests(telegram_id):
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
     cursor.execute('''
         SELECT r.created_at, r.status, r.request
         FROM requests r
         JOIN users u ON r.user_id = u.id
-        WHERE u.id = ?
+        WHERE u.telegram_id = ?
         ORDER BY r.created_at DESC
-    ''', (user_id,))
+    ''', (telegram_id,))
+
     requests = []
     for row in cursor.fetchall():
         requests.append({
@@ -53,39 +123,10 @@ def get_user_requests(user_id):
             'status': row[1],
             'request_text': row[2]
         })
+
     conn.close()
     return requests
 
-
-# logic.py
-
-def add_user(username, email, request, status='Отправлено'):
-    conn = sqlite3.connect('database.db')
-    cursor = conn.cursor()
-    try:
-        # Обновляем или добавляем пользователя
-        cursor.execute('''
-            INSERT INTO users (username, email)
-            VALUES (?, ?)
-            ON CONFLICT(username) DO UPDATE SET email=excluded.email
-        ''', (username, email))
-
-        # Получаем user_id
-        cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
-        user_id = cursor.fetchone()[0]
-
-        # Добавляем запрос
-        cursor.execute('''
-            INSERT INTO requests (user_id, request, status)
-            VALUES (?, ?, ?)
-        ''', (user_id, request, status))
-
-        conn.commit()
-    except Exception as e:
-        print(f"Ошибка: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
 
 def update_request_status(request_id, new_status):
     conn = sqlite3.connect('database.db')
@@ -98,10 +139,12 @@ def update_request_status(request_id, new_status):
         ''', (new_status, request_id))
         conn.commit()
     except Exception as e:
-        print(f"Ошибка: {e}")
+        print(f"Ошибка обновления статуса: {e}")
         conn.rollback()
     finally:
         conn.close()
+
+
 def migrate_old_statuses():
     conn = sqlite3.connect('database.db')
     cursor = conn.cursor()
@@ -112,9 +155,8 @@ def migrate_old_statuses():
             WHERE status LIKE 'Отправлено%'
         ''')
         conn.commit()
-        print(f"Обновлено записей: {cursor.rowcount}")
     except Exception as e:
-        print(f"Ошибка миграции: {e}")
+        print(f"Ошибка миграции статусов: {e}")
     finally:
         conn.close()
 
@@ -130,7 +172,9 @@ def get_request_status(request_id):
     conn.close()
     return status[0] if status else None
 
-
 if __name__ == "__main__":
+    # Последовательность выполнения миграций
     create_table()
-    migrate_old_statuses()  # Вызов миграции
+    migrate_add_unique()  # Добавляем UNIQUE constraint
+    migrate_old_statuses()  # Исправляем старые статусы
+    print("Миграции успешно выполнены!")
